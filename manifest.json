@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Telegram to Sheets",
+  "version": "1.0",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://web.telegram.org/*",
+    "https://script.google.com/*",
+    "https://web.telegram.org/k/*",
+    "https://web.telegram.org/z/*",
+    "https://web.telegram.org/a/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.telegram.org/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
