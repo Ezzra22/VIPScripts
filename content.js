@@ -8,7 +8,7 @@ const projects = {
 };
 const projectNames = Object.keys(projects);
 
-// ==================== УМНЫЙ ПАРСИНГ (из версии A) ====================
+// ==================== УМНЫЙ ПАРСИНГ (ГИБКИЙ - БЕЗ ЗАВИСИМОСТИ ОТ РЕГИСТРА) ====================
 function extractPairs(text) {
   const pairs = [];
   const numberRegex = /\b(\d+)\b/g;
@@ -26,7 +26,7 @@ function extractPairs(text) {
       projectPositions.push({ project: m[0].toUpperCase(), index: m.index, length: m[0].length });
     }
   }
-  projectPositions.sort((a,b) => a.index - b.index);
+  projectPositions.sort((a, b) => a.index - b.index);
 
   const usedNumbers = new Set();
   const usedProjects = new Set();
@@ -35,6 +35,8 @@ function extractPairs(text) {
     if (usedProjects.has(proj.project)) continue;
     let bestNumber = null;
     let bestDist = Infinity;
+    
+    // Ищем число ПОСЛЕ проекта
     for (let num of numbers) {
       if (usedNumbers.has(num.number + '@' + num.index)) continue;
       if (num.index > proj.index) {
@@ -45,6 +47,8 @@ function extractPairs(text) {
         }
       }
     }
+    
+    // Если не найдено после, ищем ДО проекта
     if (!bestNumber) {
       for (let num of numbers) {
         if (usedNumbers.has(num.number + '@' + num.index)) continue;
@@ -57,6 +61,7 @@ function extractPairs(text) {
         }
       }
     }
+    
     if (bestNumber) {
       pairs.push({
         project: proj.project,
@@ -69,6 +74,7 @@ function extractPairs(text) {
       usedProjects.add(proj.project);
     }
   }
+  
   if (pairs.length === 0) return null;
 
   let name = text;
@@ -86,7 +92,7 @@ function isVersionA() {
   return window.location.pathname.includes('/a/');
 }
 
-// ==================== ПОИСК ID ДЛЯ ВЕРСИИ K (стабильный из первого скрипта) ====================
+// ==================== ПОИСК ID ДЛЯ ВЕРСИИ K ====================
 const excludedSelectors = [
   '.dialog-title',
   '.profile-avatars-info',
@@ -108,10 +114,10 @@ function isExcludedNode(node) {
 function getClientIdForK() {
   // 1. Ищем элемент .fullName
   const fullNameElem = document.querySelector('.fullName');
-  if (fullNameElem && fullNameElem.innerText && /\b[A-Z]{3,5}\s*:?\s*\d+\b/.test(fullNameElem.innerText)) {
-    console.log('✅ [K] Найден .fullName:', fullNameElem.innerText);
+  if (fullNameElem && fullNameElem.innerText) {
     const extracted = extractPairs(fullNameElem.innerText);
     if (extracted && extracted.pairs.length) {
+      console.log('✅ [K] Найден .fullName:', fullNameElem.innerText);
       const firstPair = extracted.pairs[0];
       return {
         clientId: firstPair.number,
@@ -127,7 +133,8 @@ function getClientIdForK() {
   let bestTop = Infinity;
   for (let link of links) {
     const text = link.innerText.trim();
-    if (/\b[A-Z]{3,5}\s*:?\s*\d+\b/.test(text)) {
+    const extracted = extractPairs(text);
+    if (extracted && extracted.pairs.length) {
       const rect = link.getBoundingClientRect();
       if (rect.top > 0 && rect.top < 150 && rect.top < bestTop) {
         bestTop = rect.top;
@@ -169,10 +176,11 @@ function getClientIdForK() {
   let node;
   while (node = walker.nextNode()) {
     const text = node.textContent.trim();
-    if (/\b[A-Z]{3,5}\s*:?\s*\d+\b/.test(text)) {
+    const extracted = extractPairs(text);
+    if (extracted && extracted.pairs.length) {
       const rect = node.parentElement.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < 150) {
-        candidates.push({ node, text, rect });
+        candidates.push({ node, text, rect, extracted });
       }
     }
   }
@@ -181,22 +189,19 @@ function getClientIdForK() {
     candidates.sort((a, b) => a.rect.top - b.rect.top);
     const best = candidates[0];
     console.log('✅ [K] Найден текстовый узел:', best.text);
-    const extracted = extractPairs(best.text);
-    if (extracted && extracted.pairs.length) {
-      const firstPair = extracted.pairs[0];
-      return {
-        clientId: firstPair.number,
-        project: firstPair.project,
-        fullName: extracted.name
-      };
-    }
+    const firstPair = best.extracted.pairs[0];
+    return {
+      clientId: firstPair.number,
+      project: firstPair.project,
+      fullName: best.extracted.name
+    };
   }
 
   console.log('❌ [K] Заголовок чата не найден');
   return null;
 }
 
-// ==================== ПОИСК ID ДЛЯ ВЕРСИИ A (стабильный из второго скрипта) ====================
+// ==================== ПОИСК ID ДЛЯ ВЕРСИИ A ====================
 function getClientIdForA() {
   const titleSelectors = [
     '.ChatInfo .fullName',
@@ -208,13 +213,16 @@ function getClientIdForA() {
   let titleElement = null;
   for (let sel of titleSelectors) {
     const elem = document.querySelector(sel);
-    if (elem && elem.innerText && /\b[A-Z]{3,5}\s*:?\s*\d+/i.test(elem.innerText)) {
-      const rect = elem.getBoundingClientRect();
-      const isInLeftPanel = !!elem.closest('.dialogs, .chat-list, .folders-sidebar, .chat-item, .dialog, .dialogs-list');
-      if (!isInLeftPanel && rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.top < window.innerHeight) {
-        titleElement = elem;
-        console.log(`✅ [A] Найден заголовок по селектору: ${sel}, текст: ${elem.innerText}`);
-        break;
+    if (elem && elem.innerText) {
+      const extracted = extractPairs(elem.innerText);
+      if (extracted && extracted.pairs.length) {
+        const rect = elem.getBoundingClientRect();
+        const isInLeftPanel = !!elem.closest('.dialogs, .chat-list, .folders-sidebar, .chat-item, .dialog, .dialogs-list');
+        if (!isInLeftPanel && rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.top < window.innerHeight) {
+          titleElement = elem;
+          console.log(`✅ [A] Найден заголовок по селектору: ${sel}, текст: ${elem.innerText}`);
+          break;
+        }
       }
     }
   }
@@ -223,12 +231,15 @@ function getClientIdForA() {
     const allElements = document.querySelectorAll('div, span, h1, h2, h3, p, a, .title, .fullName');
     for (let el of allElements) {
       const text = el.innerText?.trim();
-      if (text && /\b[A-Z]{3,5}\s*:?\s*\d+/i.test(text)) {
-        const rect = el.getBoundingClientRect();
-        const isMessage = !!el.closest('.message-list, .messages-layout, .bubbles, .message');
-        const isInLeftPanel = !!el.closest('.dialogs, .chat-list, .folders-sidebar, .chat-item, .dialog, .dialogs-list');
-        if (!isMessage && !isInLeftPanel && rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.top < window.innerHeight) {
-          candidates.push({ el, text, top: rect.top });
+      if (text) {
+        const extracted = extractPairs(text);
+        if (extracted && extracted.pairs.length) {
+          const rect = el.getBoundingClientRect();
+          const isMessage = !!el.closest('.message-list, .messages-layout, .bubbles, .message');
+          const isInLeftPanel = !!el.closest('.dialogs, .chat-list, .folders-sidebar, .chat-item, .dialog, .dialogs-list');
+          if (!isMessage && !isInLeftPanel && rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.top < window.innerHeight) {
+            candidates.push({ el, text, top: rect.top, extracted });
+          }
         }
       }
     }
@@ -263,7 +274,7 @@ function getClientIdFromActiveChat() {
   }
 }
 
-// ==================== ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений) ====================
+// ==================== ОСТАЛЬНЫЕ ФУНКЦИИ ====================
 function getUserNameFromStorage() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(['userName'], (result) => resolve(result.userName || null));
